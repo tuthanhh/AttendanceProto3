@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">AttendanceProto3</string>
+
+    <string name="auth_page_title">Attendance</string>
+    <string name="auth_page_login_button_label">Login</string>
+    <string name="auth_page_register_button_label">Sign in</string>
+
+    <string name="auth_page_username_label">Username</string>
+    <string name="auth_page_password_label">Password</string>
 </resources>

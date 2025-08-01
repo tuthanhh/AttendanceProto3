@@ -3,14 +3,15 @@ package com.example.attendance.data
 import android.content.Context
 import com.example.attendance.network.UserApiService
 import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.converter.scalars.ScalarsConverterFactory
 
 class AppContainer() {
-    private val baseUrl: String = "http://localhost:8000"
 
+    private val baseUrl = "http://10.0.2.2:8000"
     private val retrofit: Retrofit = Retrofit.Builder()
         .addConverterFactory(
-            ScalarsConverterFactory.create()
+            GsonConverterFactory.create()
         )
         .baseUrl(baseUrl)
         .build()

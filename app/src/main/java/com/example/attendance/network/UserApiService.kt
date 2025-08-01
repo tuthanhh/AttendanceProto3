@@ -9,12 +9,12 @@ import retrofit2.http.Field
 import retrofit2.http.POST
 
 interface UserApiService {
-    @POST("/api/auth/register")
+    @POST("/api/users/register")
     suspend fun register (
         @Body request: RegisterRequest
     ) : Response<Unit>
 
-    @POST("/api/auth/login")
+    @POST("/api/users/login")
     suspend fun login (
         @Body request: LoginRequest
     ): Response<LoginResponse>

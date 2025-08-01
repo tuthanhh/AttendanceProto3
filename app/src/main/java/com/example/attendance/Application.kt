@@ -1,6 +1,7 @@
 package com.example.attendance
 
 import android.app.Application
+import androidx.activity.result.contract.ActivityResultContracts
 import com.example.attendance.data.AppContainer
 
 class AttendanceApp : Application() {
@@ -8,5 +9,6 @@ class AttendanceApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer()
+
     }
 }

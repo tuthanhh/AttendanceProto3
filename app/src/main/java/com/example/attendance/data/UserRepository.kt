@@ -1,5 +1,6 @@
 package com.example.attendance.data
 
+import android.util.Log
 import com.example.attendance.data.models.AuthState
 import com.example.attendance.data.models.LoginRequest
 import com.example.attendance.data.models.RegisterRequest
@@ -20,6 +21,7 @@ class UserRepository (
 
     suspend fun register(username: String, password: String, role: String) {
         withContext(Dispatchers.IO) {
+            _authState.value = AuthState.Loading
             try {
                 val response = apiService.register(RegisterRequest(username, password, role))
                 if (response.isSuccessful) {
@@ -38,6 +40,7 @@ class UserRepository (
 
     suspend fun login(username: String, password: String) {
         withContext(Dispatchers.IO) {
+            _authState.value = AuthState.Loading
             try {
                 val response = apiService.login(LoginRequest(username, password))
                 if (response.isSuccessful) {
@@ -55,6 +58,7 @@ class UserRepository (
             } catch (e: HttpException) {
                 _authState.value = AuthState.Error("HTTP error: ${e.code()}")
             }
+            Log.d("UserRepository", "Status: ${_authState.value}")
         }
     }
 }
