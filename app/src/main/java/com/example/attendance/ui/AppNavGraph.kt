@@ -20,6 +20,8 @@ import com.example.attendance.ui.login.LoginScreen
 import com.example.attendance.ui.login.LoginViewModel
 import com.example.attendance.ui.student.StudentHomeScreen
 import com.example.attendance.ui.student.StudentViewModel
+import com.example.attendance.ui.teacher.TeacherHomeScreen
+import com.example.attendance.ui.teacher.TeacherViewModel
 
 @Composable
 @androidx.annotation.RequiresPermission(allOf = [android.Manifest.permission.BLUETOOTH_ADVERTISE, android.Manifest.permission.BLUETOOTH_SCAN])
@@ -50,7 +52,6 @@ fun AppNavGraph(
                 LoginScreen(
                     viewModel,
                     onSuccess = { role ->
-                        Log.d("AppNavGraph1", "Navigating to home with role: $role")
                         navController.navigate("home/$role")
                     },
                 )
@@ -68,7 +69,13 @@ fun AppNavGraph(
                 Log.d("AppNavGraph2", "Navigating to home with role: $role")
                 when (role) {
                     "Teacher" -> {
-
+                        val viewModel = viewModel<TeacherViewModel>(
+                            factory = TeacherViewModel.Factory
+                        )
+                        TeacherHomeScreen(
+                            viewModel = viewModel,
+                            modifier = modifier
+                        )
                     }
                     "Student" -> {
                         val viewModel = viewModel<StudentViewModel>(

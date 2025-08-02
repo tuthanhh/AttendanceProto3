@@ -25,7 +25,7 @@ class UserRepository (
             try {
                 val response = apiService.register(RegisterRequest(username, password, role))
                 if (response.isSuccessful) {
-                    _authState.value = AuthState.Authenticated(role)
+                    _authState.value = AuthState.Authenticated(username, role)
                 } else {
                     _authState.value = AuthState.Error("Registration failed: ${response.code()}")
                 }
@@ -46,7 +46,7 @@ class UserRepository (
                 if (response.isSuccessful) {
                     val body = response.body()
                     if (body != null) {
-                        _authState.value = AuthState.Authenticated(body.role)
+                        _authState.value = AuthState.Authenticated(username,body.role)
                     } else {
                         _authState.value = AuthState.Error("Empty response")
                     }

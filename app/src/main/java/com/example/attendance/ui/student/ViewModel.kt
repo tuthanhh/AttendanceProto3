@@ -17,46 +17,46 @@ import android.os.ParcelUuid
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.annotation.RequiresPermission
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.attendance.AttendanceApp
+import com.example.attendance.data.StudentRepository
+import com.example.attendance.data.UserRepository
+import com.example.attendance.data.models.AttendanceRequest
+import com.example.attendance.data.models.AuthState
+import kotlinx.coroutines.launch
+import java.nio.ByteBuffer
 import java.nio.charset.Charset
+import java.util.UUID
+
 @RequiresApi(Build.VERSION_CODES.S) // Android 12+
-class StudentViewModel : ViewModel() {
+class StudentViewModel (
+    private val studentRepository: StudentRepository,
+    private val userRepository: UserRepository,
+): ViewModel() {
 
     var status = mutableStateOf("Idle")
         private set
 
+    // TODO: Replace with your actual service UUID and beacon data
     private val serviceUuid = ParcelUuid.fromString("0000ABCD-0000-1000-8000-00805F9B34FB")
-    private val beaconData = "Lecture123".toByteArray(Charset.defaultCharset())
 
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         BluetoothAdapter.getDefaultAdapter()
     }
 
-    private val advertiser: BluetoothLeAdvertiser? by lazy {
-        bluetoothAdapter?.bluetoothLeAdvertiser
-    }
-
     private val scanner: BluetoothLeScanner? by lazy {
         bluetoothAdapter?.bluetoothLeScanner
     }
-
-    private val advertiseSettings = AdvertiseSettings.Builder()
-        .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-        .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-        .setConnectable(false)
-        .build()
-
-    private val advertiseData = AdvertiseData.Builder()
-        .setIncludeDeviceName(false)
-        .addServiceUuid(serviceUuid)
-        .addServiceData(serviceUuid, beaconData)
-        .build()
-
     private val scanFilter = ScanFilter.Builder()
         .setServiceUuid(serviceUuid)
         .build()
@@ -65,27 +65,40 @@ class StudentViewModel : ViewModel() {
         .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
         .build()
 
-    private val advertiseCallback = object : AdvertiseCallback() {
-        override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            super.onStartSuccess(settingsInEffect)
-            Log.d("BLE", "Advertising started")
-            status.value = "Beacon ON"
-        }
-
-        override fun onStartFailure(errorCode: Int) {
-            super.onStartFailure(errorCode)
-            Log.e("BLE", "Advertise failed: $errorCode")
-            status.value = "Advertise failed: $errorCode"
-        }
-    }
-
     private val scanCallback = object : ScanCallback() {
+
+        @androidx.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_SCAN)
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val data = result.scanRecord?.getServiceData(serviceUuid)
             if (data != null) {
-                val txt = String(data, Charset.defaultCharset())
-                Log.d("BLE", "Beacon detected: $txt")
-                status.value = "Detected beacon: $txt"
+
+                viewModelScope.launch {
+                    val buffer = ByteBuffer.wrap(data)
+                    val mostSigBits = buffer.long
+                    val leastSigBits = buffer.long
+                    val uuid = UUID(mostSigBits, leastSigBits)
+
+                    Log.d("BLE", "Beacon detected: $uuid")
+                    status.value = "Detected beacon: $uuid"
+
+                    val response = studentRepository.createAttendance(
+                        AttendanceRequest(
+                            rollCallId = uuid.toString(),
+                            username = (userRepository.authState.value as AuthState.Authenticated).username
+                        )
+                    )
+                    response.onSuccess  {
+                        status.value = "Attendance marked"
+                        stopScan()
+                    }.onFailure { e ->
+                        if (e.message?.contains("400") == true) {
+                            status.value = "Already marked attendance"
+                        } else {
+                            status.value = "Failed to mark attendance: ${e.message}"
+                        }
+                    }
+
+                }
             }
         }
 
@@ -93,17 +106,6 @@ class StudentViewModel : ViewModel() {
             Log.e("BLE", "Scan failed: $errorCode")
             status.value = "Scan failed: $errorCode"
         }
-    }
-
-    fun startBeacon() {
-        advertiser?.startAdvertising(advertiseSettings, advertiseData, advertiseCallback)
-            ?: run { status.value = "No BLE advertiser" }
-    }
-
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADVERTISE)
-    fun stopBeacon() {
-        advertiser?.stopAdvertising(advertiseCallback)
-        status.value = "Beacon OFF"
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
@@ -122,15 +124,20 @@ class StudentViewModel : ViewModel() {
     @RequiresPermission(allOf = [Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_SCAN])
     override fun onCleared() {
         super.onCleared()
-        stopBeacon()
         stopScan()
     }
 
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                StudentViewModel()
+                val application = this[APPLICATION_KEY] as AttendanceApp
+                StudentViewModel(
+                    application.container.studentRepository,
+                    application.container.userRepository
+                )
             }
         }
     }
 }
+
+

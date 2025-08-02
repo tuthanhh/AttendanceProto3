@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,7 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.attendance.ui.MainActivity
 import com.example.attendance.R
 @RequiresApi(Build.VERSION_CODES.S)
@@ -50,11 +53,6 @@ fun StudentHomeScreen(
             Toast.makeText(context, "Scan permission denied", Toast.LENGTH_SHORT).show()
         }
 
-        if (advertiseGranted) {
-            viewModel.startBeacon()
-        } else {
-            Toast.makeText(context, "Advertise permission denied", Toast.LENGTH_SHORT).show()
-        }
     }
 
     Column(
@@ -65,40 +63,48 @@ fun StudentHomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Student Home", style = MaterialTheme.typography.headlineSmall)
-        Column (
+        Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ){
-            Text("Status: $status", style = MaterialTheme.typography.bodyLarge)
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Column(
+                modifier = Modifier
+                    .wrapContentSize()
+                    .padding(dimensionResource(id = R.dimen.padding_large)),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("Status: $status", style = MaterialTheme.typography.bodyLarge)
 
-            Button(onClick = {
-                permissionLauncher.launch(
-                    arrayOf(bluetoothScanPermission)
-                )
-            }) {
-                Text("Start Scanning")
-            }
+                Button(onClick = {
+                    permissionLauncher.launch(
+                        arrayOf(bluetoothScanPermission)
+                    )
+                }) {
+                    Text("Start Scanning")
+                }
 
-            Button(onClick = {
-                viewModel.stopScan()
-            }) {
-                Text("Stop Scanning")
-            }
-
-            Button(onClick = {
-                permissionLauncher.launch(
-                    arrayOf(bluetoothAdvertisePermission)
-                )
-            }) {
-                Text("Start Beacon")
-            }
-
-            Button(onClick = {
-                viewModel.stopBeacon()
-            }) {
-                Text("Stop Beacon")
+                Button(onClick = {
+                    viewModel.stopScan()
+                }) {
+                    Text("Stop Scanning")
+                }
             }
         }
     }
+}
+
+@RequiresPermission(allOf = [Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_SCAN])
+@Preview(showBackground = true)
+@Composable
+private fun StudentHomeScreenPreview() {
+
+    val fakeViewModel = viewModel<StudentViewModel>(
+        factory = StudentViewModel.Factory
+    )
+    StudentHomeScreen(
+        viewModel = fakeViewModel,
+        modifier = Modifier.fillMaxSize()
+    )
 }

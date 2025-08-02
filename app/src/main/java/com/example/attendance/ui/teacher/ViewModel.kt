@@ -21,17 +21,35 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.attendance.AttendanceApp
+import com.example.attendance.data.TeacherRepository
+import com.example.attendance.data.models.AttendanceResponse
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import java.nio.ByteBuffer
 import java.nio.charset.Charset
+import java.util.UUID
+
 @RequiresApi(Build.VERSION_CODES.S) // Android 12+
-class TeacherViewModel : ViewModel() {
+class TeacherViewModel(
+    private val teacherRepository: TeacherRepository,
+) : ViewModel() {
+
 
     var status = mutableStateOf("Idle")
         private set
+    var currentRollCallId = mutableStateOf<String>("")
+        private set
+
+    var isBeaconOn = mutableStateOf(false)
+        private set
 
     private val serviceUuid = ParcelUuid.fromString("0000ABCD-0000-1000-8000-00805F9B34FB")
-    private val beaconData = "Lecture123".toByteArray(Charset.defaultCharset())
 
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         BluetoothAdapter.getDefaultAdapter()
@@ -40,29 +58,10 @@ class TeacherViewModel : ViewModel() {
     private val advertiser: BluetoothLeAdvertiser? by lazy {
         bluetoothAdapter?.bluetoothLeAdvertiser
     }
-
-    private val scanner: BluetoothLeScanner? by lazy {
-        bluetoothAdapter?.bluetoothLeScanner
-    }
-
     private val advertiseSettings = AdvertiseSettings.Builder()
         .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
         .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
         .setConnectable(false)
-        .build()
-
-    private val advertiseData = AdvertiseData.Builder()
-        .setIncludeDeviceName(false)
-        .addServiceUuid(serviceUuid)
-        .addServiceData(serviceUuid, beaconData)
-        .build()
-
-    private val scanFilter = ScanFilter.Builder()
-        .setServiceUuid(serviceUuid)
-        .build()
-
-    private val scanSettings = ScanSettings.Builder()
-        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
         .build()
 
     private val advertiseCallback = object : AdvertiseCallback() {
@@ -73,29 +72,26 @@ class TeacherViewModel : ViewModel() {
         }
 
         override fun onStartFailure(errorCode: Int) {
+
             super.onStartFailure(errorCode)
-            Log.e("BLE", "Advertise failed: $errorCode")
-            status.value = "Advertise failed: $errorCode"
-        }
-    }
-
-    private val scanCallback = object : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val data = result.scanRecord?.getServiceData(serviceUuid)
-            if (data != null) {
-                val txt = String(data, Charset.defaultCharset())
-                Log.d("BLE", "Beacon detected: $txt")
-                status.value = "Detected beacon: $txt"
+            val message = when (errorCode) {
+                AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "Data too large"
+                AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Too many advertisers"
+                AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "Already started"
+                AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR -> "Internal error"
+                AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Feature unsupported"
+                else -> "Unknown error"
             }
-        }
-
-        override fun onScanFailed(errorCode: Int) {
-            Log.e("BLE", "Scan failed: $errorCode")
-            status.value = "Scan failed: $errorCode"
+            Log.e("BLE", "Advertise failed: $errorCode ($message)")
+            status.value = "Advertise failed: $message"
         }
     }
 
-    fun startBeacon() {
+    @RequiresPermission(Manifest.permission.BLUETOOTH_ADVERTISE)
+    fun startBeacon(
+        advertiseData: AdvertiseData
+    ) {
+        isBeaconOn.value = true
         advertiser?.startAdvertising(advertiseSettings, advertiseData, advertiseCallback)
             ?: run { status.value = "No BLE advertiser" }
     }
@@ -104,32 +100,64 @@ class TeacherViewModel : ViewModel() {
     fun stopBeacon() {
         advertiser?.stopAdvertising(advertiseCallback)
         status.value = "Beacon OFF"
+        currentRollCallId.value = ""
+
+        _attendanceList.value = null
+        isBeaconOn.value = false
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
-    fun startScan() {
-        scanner?.startScan(listOf(scanFilter), scanSettings, scanCallback)
-            ?: run { status.value = "No BLE scanner" }
-        status.value = "Scanning..."
+    @androidx.annotation.RequiresPermission(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+    fun startRollCall() {
+
+        viewModelScope.launch {
+            val result = teacherRepository.createRollCall()
+
+            result.onSuccess { rollCallId ->
+                status.value = "Roll call created with id: ${rollCallId.rollCallId}"
+                currentRollCallId.value = rollCallId.rollCallId
+
+                val uuid = UUID.fromString(rollCallId.rollCallId)
+                val uuidBytes = ByteBuffer.allocate(16)
+                    .putLong(uuid.mostSignificantBits)
+                    .putLong(uuid.leastSignificantBits)
+                    .array()
+
+                val advertiseData = AdvertiseData.Builder()
+                    .setIncludeDeviceName(false) // saves space
+                    .addServiceUuid(serviceUuid)
+                    .addServiceData(serviceUuid, uuidBytes) // ✅ 16 bytes only
+                    .build()
+                startBeacon(advertiseData)
+                // Optionally start beacon here
+            }.onFailure { e ->
+                status.value = "Failed to create roll call: ${e.message}"
+            }
+        }
     }
 
-    @RequiresPermission(Manifest.permission.BLUETOOTH_SCAN)
-    fun stopScan() {
-        scanner?.stopScan(scanCallback)
-        status.value = "Scan stopped"
-    }
+
 
     @RequiresPermission(allOf = [Manifest.permission.BLUETOOTH_ADVERTISE, Manifest.permission.BLUETOOTH_SCAN])
     override fun onCleared() {
         super.onCleared()
         stopBeacon()
-        stopScan()
     }
 
+    private var _attendanceList = MutableStateFlow<Result<List<AttendanceResponse>>?>(null)
+    val attendanceList: StateFlow<Result<List<AttendanceResponse>>?> = _attendanceList
+
+    fun fetchAttendanceList() {
+        viewModelScope.launch {
+            _attendanceList.value = teacherRepository.getAttendanceByRollCall(currentRollCallId.value)
+        }
+    }
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                TeacherViewModel()
+                val application = this[APPLICATION_KEY] as AttendanceApp
+                TeacherViewModel(
+                    application.container.teacherRepository
+                )
             }
         }
     }
