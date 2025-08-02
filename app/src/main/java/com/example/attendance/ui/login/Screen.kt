@@ -103,16 +103,18 @@ fun LoginScreen(
             },
             singleLine = true
         )
-        if (viewModel.authState is AuthState.Error) {
+        val state = viewModel.authState.collectAsState().value
+        if (state is AuthState.Error) {
             Text(
-                text = (viewModel.authState as AuthState.Error).msg,
+                text = state.msg,
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(dimensionResource(R.dimen.padding_small))
             )
         }
+
         // This field is only shown for registration, not login.
-        if (viewModel.isLoggingState == false) {
+        if (!viewModel.isLoggingState) {
             RoleDropdown(
                 selectedRole = viewModel.role,
                 onRoleChange = { viewModel.onRoleChange(it) },

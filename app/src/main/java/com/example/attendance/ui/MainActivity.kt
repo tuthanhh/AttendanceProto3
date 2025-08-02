@@ -39,12 +39,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+@androidx.annotation.RequiresPermission(allOf = [android.Manifest.permission.BLUETOOTH_ADVERTISE, android.Manifest.permission.BLUETOOTH_SCAN])
 fun App(
     appContainer: AppContainer,
     modifier: Modifier = Modifier
 ) {
     AttendanceProto3Theme {
-        Scaffold { innerPadding ->
+        Scaffold{ innerPadding ->
 
             AppNavGraph(
                 appContainer,
